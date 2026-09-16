@@ -1324,11 +1324,11 @@ def x_backend_chain(config: dict[str, Any], local_only: bool = False) -> list[st
 
     A ``LAST30DAYS_X_BACKEND`` pin forces a single backend (no failover): the
     user explicitly chose it. Valid pin values are in ``_X_BACKEND_KNOWN``
-    (the auto chain plus opt-in backends like grok). Browser-cookie probing
+    (the auto chain plus opt-in backends like xapi). Browser-cookie probing
     is intentionally avoided (automatic Keychain access causes popups); bird
     counts as available only when AUTH_TOKEN and CT0 are present explicitly.
 
-    Unpinned runs walk only ``_X_BACKEND_ORDER``: opt-in backends like grok
+    Unpinned runs walk only ``_X_BACKEND_ORDER``: opt-in backends like xapi
     are never auto-selected. A leftover ~/.grok/auth.json must not steal the
     X lane; pin ``LAST30DAYS_X_BACKEND=grok`` to enable it explicitly.
 
