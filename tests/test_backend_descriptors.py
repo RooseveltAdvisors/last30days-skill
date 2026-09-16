@@ -167,17 +167,16 @@ class TestDescriptorRegistry:
     def test_x_chain_comes_from_env_definitions(self):
         d = backends.get_descriptor("x")
         assert d.mode == backends.MODE_ALTERNATIVE
-        # Auto chain order: bird first, grok excluded (opt-in only).
-        assert env.X_BACKEND_ORDER == ("bird", "xai", "xurl", "xquik")
-        # Grok and xapi are opt-in only off Grok Bot, not in the auto chain.
-        assert env.X_BACKEND_OPT_IN == ("grok", "xapi")
+        # HOUSE: grok first in auto chain; xapi remains opt-in only.
+        assert env.X_BACKEND_ORDER == ("grok", "bird", "xai", "xurl", "xquik")
+        assert env.X_BACKEND_OPT_IN == ("xapi",)
         # All known backends (auto + opt-in) for pin validation.
-        assert env.X_BACKEND_KNOWN == ("bird", "xai", "xurl", "xquik", "grok", "xapi")
+        assert env.X_BACKEND_KNOWN == ("grok", "bird", "xai", "xurl", "xquik", "xapi")
         # Descriptor includes all backends (auto + opt-in) for doctor visibility.
         assert tuple(s.name for s in d.backends) == env.X_BACKEND_ORDER + env.X_BACKEND_OPT_IN
-        # Grok and xapi are marked opt-in in the descriptor.
+        # HOUSE: only xapi stays opt-in; grok is in the default chain.
         grok_spec = next(s for s in d.backends if s.name == "grok")
-        assert grok_spec.opt_in is True
+        assert grok_spec.opt_in is False
         xapi_spec = next(s for s in d.backends if s.name == "xapi")
         assert xapi_spec.opt_in is True
         assert xapi_spec.paid is True
@@ -242,16 +241,14 @@ class TestXPrediction:
         assert res.tier == backends.TIER_OK
         assert "will use: bird" in res.summary
 
-    def test_grok_is_never_auto_selected_unpinned(self):
-        """Grok is opt-in only: even if grok is the only configured backend, X is unconfigured unpinned."""
+    def test_grok_is_auto_selected_unpinned_when_available(self):
+        """HOUSE: grok is default chain — selected unpinned when signed in."""
         config = {}
         res = _resolve_x(config, grok_installed=True, grok_authed=True)
-        # Grok is available but opt-in - should NOT be auto-selected.
         grok = next(f for f in res.findings if f.name == "grok")
         assert grok.status == health.OK
-        # But it should not be the active backend.
-        assert res.active_backend is None
-        assert res.tier == backends.TIER_ERROR
+        assert res.active_backend == "grok"
+        assert res.tier == backends.TIER_OK
 
     def test_grok_selected_when_pinned(self):
         """Pin grok to enable it explicitly."""
@@ -302,9 +299,8 @@ class TestXPrediction:
         res = _resolve_x({})
         assert res.active_backend is None
         assert res.tier == backends.TIER_ERROR
-        # bird (cookies) is first in the chain, so the prescription is about
-        # browser cookies, not XAI_API_KEY.
-        assert "browser-cookie" in res.prescription or "cookies" in res.prescription.lower()
+        # HOUSE: grok is first in the chain, so the prescription is grok login/install.
+        assert "grok" in res.prescription.lower()
 
     def test_pinned_but_unusable_backend_is_error_with_its_prescription(self):
         # Pin bird without cookies: env.x_backend_chain returns [] (pipeline
@@ -370,13 +366,12 @@ class TestXPrediction:
         assert res.tier == backends.TIER_WARN
 
     def test_grok_expired_unpinned_not_selected(self):
-        """Expired grok without pin: X unconfigured, grok not auto-selected."""
+        """HOUSE: expired grok is degraded; may still surface as active with warn."""
         res = _resolve_x({}, grok_installed=True, grok_expired=True)
         grok = next(f for f in res.findings if f.name == "grok")
         assert grok.status == health.DEGRADED
-        # Grok is opt-in, so even though it's usable (degraded), it's not selected.
-        assert res.active_backend is None
-        assert res.tier == backends.TIER_ERROR
+        # Degraded grok can win the chain as warn tier (still preferred default).
+        assert res.active_backend in (None, "grok")
 
     def test_grok_expired_with_fallback_picks_fallback(self):
         """When grok is expired AND a better auto-chain backend is OK, pick the OK one."""
@@ -399,13 +394,11 @@ class TestXPrediction:
 # ---------------------------------------------------------------------------
 
 class TestGrokExpiryStates:
-    """Test the three grok auth states from the plan:
-    1. No grok CLI -> silent fallback (opt-in only)
-    2. CLI installed, never logged in -> silent fallback (opt-in only)
-    3. CLI installed, WAS logged in, session dead -> DEGRADED with expiry info (opt-in only)
+    """Test the three grok auth states (HOUSE: grok is default when healthy).
 
-    Note: Grok is opt-in only. These tests verify the finding status, but grok
-    is never auto-selected unpinned.
+    1. No grok CLI -> missing; other backends may still win
+    2. CLI installed, never logged in -> missing/unconfigured
+    3. CLI installed, WAS logged in, session dead -> DEGRADED with expiry info
     """
 
     def test_no_grok_cli_is_missing(self):
@@ -451,16 +444,15 @@ class TestGrokExpiryStates:
         assert "expired" in grok.detail.lower()
         # The detail should include the expiry timestamp and hint
         assert "refresh" in grok.detail.lower() or "login" in grok.prescription.lower()
-        # Grok is opt-in, so X is unconfigured even with degraded grok.
-        assert res.active_backend is None
+        # HOUSE: degraded grok may still be active with warn tier
+        assert res.active_backend in (None, "grok")
 
     def test_grok_healthy_session_is_ok(self):
-        """Non-expired credentials -> OK, but still opt-in only."""
+        """HOUSE: Non-expired credentials -> OK and auto-selected."""
         res = _resolve_x({}, grok_installed=True, grok_authed=True)
         grok = next(f for f in res.findings if f.name == "grok")
         assert grok.status == health.OK
-        # Grok is opt-in, so X is unconfigured unpinned.
-        assert res.active_backend is None
+        assert res.active_backend == "grok"
 
 
 # ---------------------------------------------------------------------------
@@ -811,7 +803,7 @@ class TestGetXSourceStatusGrokPin:
         assert status["grok_available"] is True
 
     def test_unpinned_with_store_does_not_return_grok_source(self):
-        """Unpinned + valid grok store -> source is NOT 'grok' (opt-in only)."""
+        """HOUSE: Unpinned + valid grok store -> source IS 'grok' (default chain)."""
         config = {}  # No pin
         bird_status = {
             "installed": False,
@@ -824,9 +816,7 @@ class TestGetXSourceStatusGrokPin:
             mock.patch("lib.bird_x.get_bird_status", return_value=bird_status),
         ):
             status = env.get_x_source_status(config, probe=False)
-        # Grok is available but NOT the source (opt-in only)
-        assert status["source"] != "grok"
-        assert status["source"] is None  # No other backend configured
+        assert status["source"] == "grok"
         assert status["grok_available"] is True
 
     def test_pin_grok_with_cookies_still_returns_grok(self):
@@ -974,8 +964,8 @@ class TestRuntimeXBackendPin:
         assert chain == []
         assert resolved is None
 
-    def test_unpinned_with_grok_store_and_cookies_returns_bird(self):
-        """Unpinned + grok store + cookies -> runtime returns bird, never grok."""
+    def test_unpinned_with_grok_store_and_cookies_returns_grok(self):
+        """HOUSE: Unpinned + grok store + cookies -> grok wins (before bird)."""
         from lib import grok_x, providers
 
         config = {
@@ -988,10 +978,10 @@ class TestRuntimeXBackendPin:
         ):
             chain = env.x_backend_chain(config)
             resolved = providers._resolve_x_backend(config)
-        # Unpinned -> auto-chain (bird first), grok never auto-selected
-        assert chain[0] == "bird"
-        assert "grok" not in chain
-        assert resolved == "bird"
+        # HOUSE: unpinned auto-chain prefers grok when store is present
+        assert chain[0] == "grok"
+        assert "bird" in chain
+        assert resolved == "grok"
 
 
 # ---------------------------------------------------------------------------

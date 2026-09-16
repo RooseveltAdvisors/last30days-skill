@@ -389,3 +389,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) to open a PR, [CONTRIBUTORS.md](CONTRIBUT
 ---
 
 **@slashlast30days** · [github.com/mvanhorn/last30days-skill](https://github.com/mvanhorn/last30days-skill)
+
+## House fork
+
+See [HOUSE.md](./HOUSE.md) for the Grok Build X backend default and Zeta pin.

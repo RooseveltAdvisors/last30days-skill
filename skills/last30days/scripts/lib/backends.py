@@ -500,7 +500,7 @@ _SC_SPEC = BackendSpec(
 # X backend requirements, keyed by name.
 _X_REQUIRES: Dict[str, str] = {
     "xai": "XAI_API_KEY (xAI/Grok live search)",
-    "grok": "grok CLI installed + signed in (opt-in only; pin to enable)",
+    "grok": "grok CLI installed + signed in (HOUSE default when available)",
     "bird": "X browser cookies (AUTH_TOKEN/CT0) + node",
     "xurl": "xurl CLI installed + OAuth2 login",
     "xquik": "XQUIK_API_KEY (xquik.com)",

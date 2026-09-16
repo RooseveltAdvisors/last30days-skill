@@ -1169,19 +1169,24 @@ def get_reddit_source(config: dict[str, Any]) -> str | None:
 # source; the rest are ordered failover backups, tried only if the one before
 # returns nothing or errors. There is one X source ("x"); these are its
 # interchangeable backends, never run in parallel.
+#   grok  — HOUSE DEFAULT: Grok Build CLI + ~/.grok/auth.json (no X cookies,
+#           no XAI_API_KEY). Uses x_keyword_search / x_semantic_search tools.
 #   bird  — X GraphQL scrape via the user's browser cookies (AUTH_TOKEN/CT0)
-#   xai   — xAI/Grok live search (XAI_API_KEY)
+#   xai   — xAI/Grok live search (XAI_API_KEY console key)
 #   xurl  — official X API v2 (xurl CLI, OAuth2)
 #   xquik — key-based REST X search (XQUIK_API_KEY)
-_X_BACKEND_ORDER = ("bird", "xai", "xurl", "xquik")
+#
+# RooseveltAdvisors house fork (Zeta): prefer Grok Build subscription auth on
+# the fleet. Upstream keeps grok opt-in; we put it first when signed in so
+# quota-axi Grok runway backs last30days X without Twitter cookies.
+_X_BACKEND_ORDER = ("grok", "bird", "xai", "xurl", "xquik")
 
-# Opt-in backends: never in the default unpinned auto chain; require an
-# explicit pin. grok is here because a leftover ~/.grok/auth.json must never
-# steal the X lane. xapi (direct X API v2 with X_BEARER_TOKEN) is here so an
-# ambient bearer exported for some other tool never spends X API credits
-# every time the cookie scraper comes back empty; on an official-only
-# host it is the first rung of the auto chain instead (see _X_OFFICIAL).
-_X_BACKEND_OPT_IN = ("grok", "xapi")
+# Opt-in backends: never in the default unpinned auto chain unless listed
+# above. xapi (direct X API v2 with X_BEARER_TOKEN) stays opt-in so an ambient
+# bearer exported for some other tool never spends X API credits every time
+# the cookie scraper comes back empty; on an official-only host it is the
+# first rung of the auto chain instead (see _X_OFFICIAL).
+_X_BACKEND_OPT_IN = ("xapi",)
 
 # All known backends (auto chain + opt-in): valid values for the pin var.
 _X_BACKEND_KNOWN = _X_BACKEND_ORDER + _X_BACKEND_OPT_IN
